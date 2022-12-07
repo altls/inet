@@ -1,0 +1,91 @@
+version: "3"
+services:
+  traefik:
+    image: traefik:v2.9
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      # @todo 添加日志监控 https://doc.traefik.io/traefik/observability/logs/
+    ports:
+      - "${TRAEFIK_LISTEN}:80"
+      - "8080:8080"
+    networks:
+      - inet-chan-traefik
+    volumes:
+      - ${HOST_DOCKER_SOCK}:/var/run/docker.sock:ro
+    mem_limit: ${SVC_TRAEFIK_MEMORY_LIMIT}
+
+  npna:
+    image: arnoluo/nginx-php-node:alpine3.16
+    labels:
+      - traefik.enable=${TRAEFIK_ENABLE}
+      # https://doc.traefik.io/traefik/routing/providers/docker/#traefikdockernetwork
+      # networks有多个时需要指定traefik network(取services.networks下通过name配置的名称)，否则会随机选，大概率选错然后 gateway timeout
+      - traefik.docker.network=inet-chan-traefik
+      ### 使用不同路径，映射到同一容器不同端口
+      # path /
+      - traefik.http.routers.root.rule=Host(`${PROJECT_MAIN_HOST}`)
+      - traefik.http.routers.root.entrypoints=web
+      - traefik.http.routers.root.service=root-svc
+      - traefik.http.services.root-svc.loadbalancer.server.port=${TRAEFIK_ROOT_PATH_PORT}
+      # path /doc
+      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.rule=Host(`${PROJECT_MAIN_HOST}`) && Path(`/${TRAEFIK_SUB_PATH_DOC}`)
+      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.entrypoints=web
+      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.service=${TRAEFIK_SUB_PATH_DOC}-svc
+      - traefik.http.services.${TRAEFIK_SUB_PATH_DOC}-svc.loadbalancer.server.port=${TRAEFIK_SUB_PATH_DOC_PORT}
+      # path /doc 大部分项目默认使用根路径运行，需定义中间件，处理uri
+      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.middlewares=${TRAEFIK_SUB_PATH_DOC}-mdl
+      - traefik.http.middlewares.${TRAEFIK_SUB_PATH_DOC}-mdl.stripprefix.prefixes=/${TRAEFIK_SUB_PATH_DOC}
+
+    volumes:
+      - ${HOST_WEB_SRC}:/var/www/:rw
+      - ${HOST_NGINX_SERVER_DIR}:/etc/nginx/server/:ro
+      - ${HOST_NGINX_CONF}:/etc/nginx/nginx.conf:ro
+      - ${HOST_NGINX_LOG_DIR}:/var/log/nginx/:rw
+      - ${HOST_PHP_CUSTOM_INI}:/usr/local/etc/php/conf.d/php-custom.ini:rw
+      - ${HOST_PHP_FPM_CONF}:/usr/local/etc/php-fpm.d/www.conf
+      - ${HOST_PHP_LOG_DIR}:/var/log/php/:rw
+    networks:
+      - inet-chan-traefik
+      - inet-chan-data
+    depends_on:
+      - traefik
+    environment:
+      - PROJECT_MAIN_HOST=${PROJECT_MAIN_HOST}
+      - COMPOSER_ALLOW_SUPERUSER=1
+      - COMPOSER_NO_INTERACTION=1
+      - XDEBUG_MODE=${PHP_XDEBUG_MODE}
+      - XDEBUG_CLIENT_HOST=${PHP_XDEBUG_CLIENT_HOST}
+      - XDEBUG_PORT=${PHP_XDEBUG_PORT}
+      - DB_TYPE=${DB_TYPE}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_CHARSET=${DB_CHARSET}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_TIMEOUT=${REDIS_TIMEOUT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    mem_limit: ${SVC_NPNA_MEMORY_LIMIT}
+
+  redis:
+    image: redis:alpine
+    expose:
+      - "6379"
+    networks:
+      - inet-chan-data
+    volumes:
+      - ${HOST_REDIS_CONF}:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    mem_limit: ${SVC_REDIS_MEMORY_LIMIT}
+
+networks:
+  inet-chan-traefik:
+    name: inet-chan-traefik
+  inet-chan-data:
+    name: inet-chan-data
