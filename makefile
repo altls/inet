@@ -1,6 +1,7 @@
 .PHONY: conf log src
 
 build:
+	[ -f ./.env ] || (cp .env.example .env && echo should edit .env first)
 	docker compose build
 
 up: down
@@ -10,7 +11,7 @@ upd: down
 	docker compose up -d --remove-orphans
 
 exec:
-	docker compose exec -it inet-npna-1 /bin/sh
+	docker compose exec -it npa /bin/sh
 
 down:
 	docker compose down

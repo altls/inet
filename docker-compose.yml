@@ -17,8 +17,8 @@ services:
       - ${HOST_DOCKER_SOCK}:/var/run/docker.sock:ro
     mem_limit: ${SVC_TRAEFIK_MEMORY_LIMIT}
 
-  npna:
-    image: arnoluo/nginx-php-node:alpine3.16
+  npa:
+    image: arnoluo/nginx-php:alpine3.16
     labels:
       - traefik.enable=${TRAEFIK_ENABLE}
       # https://doc.traefik.io/traefik/routing/providers/docker/#traefikdockernetwork
