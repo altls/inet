@@ -1,4 +1,4 @@
-version: "3"
+version: "3.9"
 services:
   traefik:
     image: traefik:v2.9
@@ -7,10 +7,15 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
+      - --metrics.prometheus=true
+      # - --metrics.prometheus.buckets=0.1,0.3,1.2,5.0
+      # - --metrics.prometheus.manualrouting=true
+      # - --metrics.prometheus.addrouterslabels=true
+      # - --metrics.prometheus.addServicesLabels=true
       # @todo 添加日志监控 https://doc.traefik.io/traefik/observability/logs/
     ports:
-      - "${TRAEFIK_LISTEN}:80"
-      - "8080:8080"
+      - ${TRAEFIK_LISTEN}:80
+      - 8080:8080
     networks:
       - inet-chan-traefik
     volumes:
@@ -29,15 +34,20 @@ services:
       - traefik.http.routers.root.rule=Host(`${PROJECT_MAIN_HOST}`)
       - traefik.http.routers.root.entrypoints=web
       - traefik.http.routers.root.service=root-svc
-      - traefik.http.services.root-svc.loadbalancer.server.port=${TRAEFIK_ROOT_PATH_PORT}
-      # path /doc
-      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.rule=Host(`${PROJECT_MAIN_HOST}`) && Path(`/${TRAEFIK_SUB_PATH_DOC}`)
-      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.entrypoints=web
-      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.service=${TRAEFIK_SUB_PATH_DOC}-svc
-      - traefik.http.services.${TRAEFIK_SUB_PATH_DOC}-svc.loadbalancer.server.port=${TRAEFIK_SUB_PATH_DOC_PORT}
-      # path /doc 大部分项目默认使用根路径运行，需定义中间件，处理uri
-      - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.middlewares=${TRAEFIK_SUB_PATH_DOC}-mdl
-      - traefik.http.middlewares.${TRAEFIK_SUB_PATH_DOC}-mdl.stripprefix.prefixes=/${TRAEFIK_SUB_PATH_DOC}
+      - traefik.http.services.root-svc.loadbalancer.server.port=${TRAEFIK_ROOT_CONTAINER_PORT}
+      # # path /doc
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.rule=Host(`${PROJECT_MAIN_HOST}`) && Path(`/${TRAEFIK_SUB_PATH_DOC}`)
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.entrypoints=web
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.service=${TRAEFIK_SUB_PATH_DOC}-svc
+      # - traefik.http.services.${TRAEFIK_SUB_PATH_DOC}-svc.loadbalancer.server.port=${TRAEFIK_SUB_PATH_DOC_PORT}
+      # # path /doc 大部分项目默认使用根路径运行，需定义中间件，处理uri
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.middlewares=${TRAEFIK_SUB_PATH_DOC}-mdl
+      # - traefik.http.middlewares.${TRAEFIK_SUB_PATH_DOC}-mdl.stripprefix.prefixes=/${TRAEFIK_SUB_PATH_DOC}
+      # subdomain doc.inet
+      - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.rule=Host(`${TRAEFIK_DOC_HOST_PREFIX}.${PROJECT_MAIN_HOST}`)
+      - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.entrypoints=web
+      - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.service=${TRAEFIK_DOC_HOST_PREFIX}-svc
+      - traefik.http.services.${TRAEFIK_DOC_HOST_PREFIX}-svc.loadbalancer.server.port=${TRAEFIK_DOC_CONTAINER_PORT}
 
     volumes:
       - ${HOST_WEB_SRC}:/var/www/:rw
@@ -53,9 +63,9 @@ services:
     depends_on:
       - traefik
     environment:
-      - PROJECT_MAIN_HOST=${PROJECT_MAIN_HOST}
       - COMPOSER_ALLOW_SUPERUSER=1
       - COMPOSER_NO_INTERACTION=1
+      - PROJECT_MAIN_HOST=${PROJECT_MAIN_HOST}
       - XDEBUG_MODE=${PHP_XDEBUG_MODE}
       - XDEBUG_CLIENT_HOST=${PHP_XDEBUG_CLIENT_HOST}
       - XDEBUG_PORT=${PHP_XDEBUG_PORT}
@@ -71,12 +81,12 @@ services:
       - REDIS_TIMEOUT=${REDIS_TIMEOUT}
       - REDIS_DB=${REDIS_DB}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    mem_limit: ${SVC_NPNA_MEMORY_LIMIT}
+    mem_limit: ${SVC_NPA_MEMORY_LIMIT}
 
   redis:
     image: redis:alpine
     expose:
-      - "6379"
+      - 6379
     networks:
       - inet-chan-data
     volumes:
@@ -84,8 +94,81 @@ services:
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     mem_limit: ${SVC_REDIS_MEMORY_LIMIT}
 
+  prometheus:
+    image: prom/prometheus
+    labels:
+      - traefik.enable=${TRAEFIK_ENABLE}
+      - traefik.http.routers.${TRAEFIK_PROM_HOST_PREFIX}.rule=Host(`${TRAEFIK_PROM_HOST_PREFIX}.${PROJECT_MAIN_HOST}`)
+      - traefik.http.routers.${TRAEFIK_PROM_HOST_PREFIX}.service=${TRAEFIK_PROM_HOST_PREFIX}-svc
+      - traefik.http.routers.${TRAEFIK_PROM_HOST_PREFIX}.entrypoints=web
+      - traefik.http.services.${TRAEFIK_PROM_HOST_PREFIX}-svc.loadbalancer.server.port=9090
+      - traefik.docker.network=inet-chan-traefik
+    volumes:
+      - ${HOST_PROMETHEUS_CONF_DIR}:/etc/prometheus/
+      - ${HOST_PROMETHEUS_STORAGE_DIR}:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      # - --web.external-url=:9090
+      # - --web.enable-lifecycle
+      # - --storage.tsdb.retention=15d
+    # expose:
+    #   - 9090
+    # ports:
+    #   - 9090:9090
+    networks:
+      - inet-chan-traefik
+      - inet-chan-prom
+    depends_on:
+      - alertmanager
+      - traefik
+
+  alertmanager:
+    image: prom/alertmanager
+    # expose:
+    #   - 9093
+    volumes:
+      - ${HOST_PROMETHEUS_CONF_DIR}:/etc/alertmanager/
+      - ${HOST_ALERTMANAGER_STORAGE_DIR}:/alertmanager/
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    networks:
+      # - inet-chan-traefik
+      - inet-chan-prom
+    # depends_on:
+    #   - traefik
+
+  grafana:
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+      - traefik
+    environment:
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_METRICS_ENABLED: true
+    labels:
+      - traefik.enable=${TRAEFIK_ENABLE}
+      - traefik.http.routers.${TRAEFIK_GRAFANA_HOST_PREFIX}.rule=Host(`${TRAEFIK_GRAFANA_HOST_PREFIX}.${PROJECT_MAIN_HOST}`)
+      - traefik.http.routers.${TRAEFIK_GRAFANA_HOST_PREFIX}.service=${TRAEFIK_GRAFANA_HOST_PREFIX}-svc
+      - traefik.http.routers.${TRAEFIK_GRAFANA_HOST_PREFIX}.entrypoints=web
+      - traefik.http.services.${TRAEFIK_GRAFANA_HOST_PREFIX}-svc.loadbalancer.server.port=3000
+      - traefik.docker.network=inet-chan-traefik
+    networks:
+      - inet-chan-prom
+      - inet-chan-traefik
+
 networks:
   inet-chan-traefik:
     name: inet-chan-traefik
   inet-chan-data:
     name: inet-chan-data
+  inet-chan-prom:
+    name: inet-chan-prom

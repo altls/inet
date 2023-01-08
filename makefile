@@ -16,5 +16,15 @@ exec:
 down:
 	docker compose down
 
+clean: down
+	rm -Rf ./storage/prometheus/*
+	rm -Rf ./storage/alertmanager/*
+
 logs:
 	docker compose logs
+
+test:
+	curl inet
+	curl doc.inet
+	curl prom.inet
+	curl prom.inet/metrics
