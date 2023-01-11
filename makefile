@@ -1,13 +1,17 @@
-.PHONY: conf log src
+.PHONY: conf log src storage
 
 build:
 	[ -f ./.env ] || (cp .env.example .env && echo should edit .env first)
 	docker compose build
 
-up: down
+dns:
+	cp -f conf/dnsmasq/inet.conf /usr/local/etc/dnsmasq.d/inet.conf
+	brew services restart dnsmasq
+
+up: clean
 	docker compose up --remove-orphans
 
-upd: down
+upd: clean
 	docker compose up -d --remove-orphans
 
 exec:
@@ -27,4 +31,3 @@ test:
 	curl inet
 	curl doc.inet
 	curl prom.inet
-	curl prom.inet/metrics

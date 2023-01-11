@@ -19,7 +19,10 @@ services:
     networks:
       - inet-chan-traefik
     volumes:
-      - ${HOST_DOCKER_SOCK}:/var/run/docker.sock:ro
+      - type: bind
+        source: ${HOST_DOCKER_SOCK}
+        target: /var/run/docker.sock
+        read_only: true
     mem_limit: ${SVC_TRAEFIK_MEMORY_LIMIT}
 
   npa:
@@ -35,24 +38,24 @@ services:
       - traefik.http.routers.root.entrypoints=web
       - traefik.http.routers.root.service=root-svc
       - traefik.http.services.root-svc.loadbalancer.server.port=${TRAEFIK_ROOT_CONTAINER_PORT}
-      # # path /doc
-      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.rule=Host(`${PROJECT_MAIN_HOST}`) && Path(`/${TRAEFIK_SUB_PATH_DOC}`)
-      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.entrypoints=web
-      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.service=${TRAEFIK_SUB_PATH_DOC}-svc
-      # - traefik.http.services.${TRAEFIK_SUB_PATH_DOC}-svc.loadbalancer.server.port=${TRAEFIK_SUB_PATH_DOC_PORT}
-      # # path /doc 大部分项目默认使用根路径运行，需定义中间件，处理uri
-      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.middlewares=${TRAEFIK_SUB_PATH_DOC}-mdl
-      # - traefik.http.middlewares.${TRAEFIK_SUB_PATH_DOC}-mdl.stripprefix.prefixes=/${TRAEFIK_SUB_PATH_DOC}
       # subdomain doc.inet
       - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.rule=Host(`${TRAEFIK_DOC_HOST_PREFIX}.${PROJECT_MAIN_HOST}`)
       - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.entrypoints=web
       - traefik.http.routers.${TRAEFIK_DOC_HOST_PREFIX}.service=${TRAEFIK_DOC_HOST_PREFIX}-svc
       - traefik.http.services.${TRAEFIK_DOC_HOST_PREFIX}-svc.loadbalancer.server.port=${TRAEFIK_DOC_CONTAINER_PORT}
+      ## 以下为使用子路径配置 /doc
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.rule=Host(`${PROJECT_MAIN_HOST}`) && Path(`/${TRAEFIK_SUB_PATH_DOC}`)
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.entrypoints=web
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.service=${TRAEFIK_SUB_PATH_DOC}-svc
+      # - traefik.http.services.${TRAEFIK_SUB_PATH_DOC}-svc.loadbalancer.server.port=${TRAEFIK_SUB_PATH_DOC_PORT}
+      ### 大部分项目默认使用根路径运行，还需定义中间件，处理uri
+      # - traefik.http.routers.${TRAEFIK_SUB_PATH_DOC}.middlewares=${TRAEFIK_SUB_PATH_DOC}-mdl
+      # - traefik.http.middlewares.${TRAEFIK_SUB_PATH_DOC}-mdl.stripprefix.prefixes=/${TRAEFIK_SUB_PATH_DOC}
 
     volumes:
       - ${HOST_WEB_SRC}:/var/www/:rw
-      - ${HOST_NGINX_SERVER_DIR}:/etc/nginx/server/:ro
-      - ${HOST_NGINX_CONF}:/etc/nginx/nginx.conf:ro
+      - ${HOST_NGINX_CONF_DIR}/conf.d/:/etc/nginx/conf.d/:ro
+      - ${HOST_NGINX_CONF_DIR}/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${HOST_NGINX_LOG_DIR}:/var/log/nginx/:rw
       - ${HOST_PHP_CUSTOM_INI}:/usr/local/etc/php/conf.d/php-custom.ini:rw
       - ${HOST_PHP_FPM_CONF}:/usr/local/etc/php-fpm.d/www.conf
@@ -63,24 +66,24 @@ services:
     depends_on:
       - traefik
     environment:
-      - COMPOSER_ALLOW_SUPERUSER=1
-      - COMPOSER_NO_INTERACTION=1
-      - PROJECT_MAIN_HOST=${PROJECT_MAIN_HOST}
-      - XDEBUG_MODE=${PHP_XDEBUG_MODE}
-      - XDEBUG_CLIENT_HOST=${PHP_XDEBUG_CLIENT_HOST}
-      - XDEBUG_PORT=${PHP_XDEBUG_PORT}
-      - DB_TYPE=${DB_TYPE}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - DB_CHARSET=${DB_CHARSET}
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
-      - REDIS_TIMEOUT=${REDIS_TIMEOUT}
-      - REDIS_DB=${REDIS_DB}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      COMPOSER_ALLOW_SUPERUSER: 1
+      COMPOSER_NO_INTERACTION: 1
+      PROJECT_MAIN_HOST: ${PROJECT_MAIN_HOST}
+      XDEBUG_MODE: ${PHP_XDEBUG_MODE}
+      XDEBUG_CLIENT_HOST: ${PHP_XDEBUG_CLIENT_HOST}
+      XDEBUG_PORT: ${PHP_XDEBUG_PORT}
+      DB_TYPE: ${DB_TYPE}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_CHARSET: ${DB_CHARSET}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_TIMEOUT: ${REDIS_TIMEOUT}
+      REDIS_DB: ${REDIS_DB}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     mem_limit: ${SVC_NPA_MEMORY_LIMIT}
 
   redis:
@@ -90,7 +93,10 @@ services:
     networks:
       - inet-chan-data
     volumes:
-      - ${HOST_REDIS_CONF}:/usr/local/etc/redis/redis.conf:ro
+      - type: bind
+        source: ${HOST_REDIS_CONF}
+        target: /usr/local/etc/redis/redis.conf
+        read_only: true
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     mem_limit: ${SVC_REDIS_MEMORY_LIMIT}
 
@@ -114,8 +120,8 @@ services:
       # - --web.external-url=:9090
       # - --web.enable-lifecycle
       # - --storage.tsdb.retention=15d
-    # expose:
-    #   - 9090
+    expose:
+      - 9090
     # ports:
     #   - 9090:9090
     networks:
@@ -123,29 +129,39 @@ services:
       - inet-chan-prom
     depends_on:
       - alertmanager
+      - node-exporter
       - traefik
 
   alertmanager:
     image: prom/alertmanager
-    # expose:
-    #   - 9093
+    expose:
+      - 9093
     volumes:
       - ${HOST_PROMETHEUS_CONF_DIR}:/etc/alertmanager/
       - ${HOST_ALERTMANAGER_STORAGE_DIR}:/alertmanager/
+    environment:
+      AM_SMTP_SMARTHOST: ${AM_SMTP_SMARTHOST}
+      AM_SMTP_FROM: ${AM_SMTP_FROM}
+      AM_SMTP_AUTH_USERNAME: ${AM_SMTP_AUTH_USERNAME}
+      AM_SMTP_AUTH_PASSWORD: ${AM_SMTP_AUTH_PASSWORD}
+      AM_RECEIVER_DEFAULT: ${AM_RECEIVER_DEFAULT}
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
     networks:
-      # - inet-chan-traefik
       - inet-chan-prom
-    # depends_on:
-    #   - traefik
+
+  node-exporter:
+    image: prom/node-exporter
+    expose:
+      - 9100
+    networks:
+      - inet-chan-prom
 
   grafana:
     image: grafana/grafana
     depends_on:
       - prometheus
-      - traefik
     environment:
       GF_INSTALL_PLUGINS: grafana-piechart-panel
       GF_SECURITY_ADMIN_USER: admin

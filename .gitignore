@@ -3,3 +3,4 @@
 .env
 storage/alertmanager/*
 storage/prometheus/
+conf/nginx/conf.d/*.conf
