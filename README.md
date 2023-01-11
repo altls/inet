@@ -26,7 +26,7 @@ internal network
 
 4. 配置osx系统使用 dnsmasq
     - 所有请求都由dnsmasq解析: 修改系统设置中的dns配置即可
-    - 或指定域名由dnsmasq解析: `mkdir -p /etc/resolver && echo "nameserver 127.0.0.1" > /etc/resolver/inet` (/etc/resolver/inet inet替换为conf内实际自定义域名)
+    - 或指定域名由dnsmasq解析: `sudo mkdir -p /etc/resolver && echo 'nameserver 127.0.0.1' | sudo tee /etc/resolver/inet` (/etc/resolver/inet inet替换为conf内实际自定义域名)
 
 ## structure
 ```bash
